@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Osler Wellness — POS & Stock</title>
+  <style>
+    :root {--bg:#0b1323; --card:#111a2c; --muted:#95a4b8; --text:#e7eefb; --accent:#14b8a6; --danger:#ef4444;}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto}
+    .wrap{max-width:1080px;margin:28px auto;padding:0 16px}
+    .pill{display:inline-block;background:#1b2a44;padding:6px 10px;border-radius:999px;color:#a2b3c6;font-size:12px;margin-left:6px}
+    .card{background:var(--card);border:1px solid #1f2d46;border-radius:14px;padding:16px;margin:14px 0}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .col{flex:1 1 220px;min-width:220px}
+    label{display:block;font-size:12px;color:var(--muted);margin:6px 0 6px 2px}
+    input,select,button,textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #2a3b58;background:#0e1728;color:var(--text)}
+    button{cursor:pointer}
+    .btn{background:#123; border:1px solid #2a3b58}
+    .btn.primary{background:var(--accent);border:none;color:#042b29;font-weight:600}
+    .btn.danger{background:#3b1114;border:1px solid #5f1d22;color:#f7b4b7}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{padding:10px;border-bottom:1px solid #1f2d46;text-align:left}
+    th{color:#9ab0c9;font-weight:600}
+    .tabs{display:flex;gap:8px;margin-bottom:12px}
+    .tab{padding:8px 14px;border-radius:999px;background:#1b2a44;color:#b2c3d8;cursor:pointer;border:1px solid #23324f}
+    .tab.active{background:#243656;color:#fff}
+    .right{display:flex;gap:6px;align-items:center;justify-content:flex-end}
+    .mini{font-size:12px}
+    .badge{display:inline-block;padding:3px 8px;border-radius:8px;background:#0f1a2e;border:1px solid #273753;color:#9ab0c9}
+    .ok{color:#10b981}
+    .err{background:#2a0d12;border-color:#5f1d22;color:#f9b4b7;padding:10px;border-radius:10px;margin-top:8px}
+    .hidden{display:none}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h2>Osler Wellness — POS & Stock 
+      <span id="supabaseChip" class="pill">Supabase: …</span>
+      <span id="locChip" class="pill">Locations: SV & RH1</span>
+    </h2>
+
+    <div class="tabs">
+      <div id="tab-pos" class="tab active">Dispense (POS)</div>
+      <div id="tab-inv" class="tab">Inventory & Transfer</div>
+      <div id="tab-admin" class="tab">Product Admin</div>
+      <div class="right" style="flex:1">
+        <span class="badge mini">Plato patient: <span id="patientFlag">—</span></span>
+      </div>
+    </div>
+
+    <!-- POS -->
+    <section id="pos" class="card">
+      <h3>Dispense</h3>
+      <div class="row">
+        <div class="col"><label>Product</label><select id="posProduct"></select></div>
+        <div class="col"><label>Location</label>
+          <select id="posLoc"><option>SV</option><option>RH1</option></select>
+        </div>
+        <div class="col"><label>Quantity</label><input id="posQty" type="number" min="1" value="1"/></div>
+        <div class="col"><label>Unit Price</label><input id="posPrice" type="number" min="0" step="0.01"/></div>
+      </div>
+      <div class="row">
+        <div class="col"><label>Doctor Initials</label><input id="posDoctor" placeholder="e.g., AB"/></div>
+        <div class="col"><label>Dosage / Remarks</label><input id="posRemarks" placeholder="e.g., 1 tab bd"/></div>
+        <div class="col"><label>Patient ID (Plato)</label><input id="posPatient" placeholder="auto if opened from patient page"/></div>
+        <div class="col" style="align-self:flex-end"><button id="btnAddCart" class="btn">+ Add to Cart</button></div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="align-items:center">
+          <h4 style="margin:0">Cart</h4>
+          <div style="flex:1"></div>
+          <div class="mini">Items: <span id="cartItems">0</span> • Total: $<span id="cartTotal">0.00</span></div>
+          <button id="btnSubmitCart" class="btn primary">✓ Submit</button>
+        </div>
+        <table id="cartTable">
+          <thead><tr><th>Product</th><th>Loc</th><th>Qty</th><th>Unit</th><th>Line</th><th>Actions</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div id="posMsg"></div>
+    </section>
+
+    <!-- Inventory & Transfer -->
+    <section id="inv" class="card hidden">
+      <h3>Inventory & Transfer</h3>
+      <div class="card">
+        <h4>Quick Stock — Receive into RH1</h4>
+        <div class="row">
+          <div class="col"><label>Product</label><select id="rxProduct"></select></div>
+          <div class="col"><label>Location</label><input disabled value="RH1"/></div>
+          <div class="col"><label>Receive Qty</label><input id="rxQty" type="number" min="1" value="1"/></div>
+          <div class="col" style="align-self:flex-end"><button id="btnReceive" class="btn primary">Receive to RH1</button></div>
+        </div>
+        <div id="rxMsg"></div>
+      </div>
+
+      <div class="card">
+        <h4>Transfer between locations</h4>
+        <div class="row">
+          <div class="col"><label>Product</label><select id="tfProduct"></select></div>
+          <div class="col"><label>From</label><select id="tfFrom"><option>RH1</option><option>SV</option></select></div>
+          <div class="col"><label>To</label><select id="tfTo"><option>SV</option><option>RH1</option></select></div>
+          <div class="col"><label>Quantity</label><input id="tfQty" type="number" min="1" value="1"/></div>
+          <div class="col" style="align-self:flex-end"><button id="btnTransfer" class="btn">Transfer</button></div>
+        </div>
+        <div id="tfMsg"></div>
+      </div>
+
+      <div class="card">
+        <h4>Inventory</h4>
+        <table id="invTable">
+          <thead><tr><th>Product</th><th>Barcode</th><th>Price</th><th>On Hand (SV)</th><th>On Hand (RH1)</th><th>Actions</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h4>Recent Movements</h4>
+        <table id="mvTable">
+          <thead><tr><th>Date/Time</th><th>Type</th><th>Product</th><th>From</th><th>To</th><th>Qty</th><th>Actions</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Product Admin -->
+    <section id="admin" class="card hidden">
+      <h3>Product Admin</h3>
+      <div class="row">
+        <div class="col"><label>Product Name</label><input id="paName" placeholder="e.g., Amoxicillin 500mg"/></div>
+        <div class="col"><label>Barcode</label><input id="paBarcode" placeholder="EAN/UPC or custom"/></div>
+        <div class="col"><label>Selling Price</label><input id="paPrice" type="number" min="0" step="0.01" value="0"/></div>
+        <div class="col" style="align-self:flex-end"><button id="btnSaveProduct" class="btn primary">Save Product</button></div>
+      </div>
+      <div id="adminMsg"></div>
+    </section>
+
+    <p class="mini" id="footNote"></p>
+  </div>
+
+  <script>
+  // Simple tab toggling
+  const tabs = {pos: document.getElementById('pos'), inv: document.getElementById('inv'), admin: document.getElementById('admin')};
+  const tabBtns = {pos: document.getElementById('tab-pos'), inv: document.getElementById('tab-inv'), admin: document.getElementById('tab-admin')};
+  const setTab = (k)=>{
+    Object.values(tabs).forEach(el=>el.classList.add('hidden'));
+    Object.values(tabBtns).forEach(el=>el.classList.remove('active'));
+    tabs[k].classList.remove('hidden');
+    tabBtns[k].classList.add('active');
+  };
+  tabBtns.pos.onclick = ()=>setTab('pos');
+  tabBtns.inv.onclick = ()=>setTab('inv');
+  tabBtns.admin.onclick = ()=>setTab('admin');
+
+  // Fetch env (supabase credentials + plato context)
+  let supa = null, plato = { token: null, patientId: null };
+  const supabaseChip = document.getElementById('supabaseChip');
+  const patientFlag = document.getElementById('patientFlag');
+  fetch('/api/env' + location.search).then(r=>r.json()).then(j=>{
+    if(j.error){supabaseChip.textContent='Supabase: error'; return;}
+    plato = { token: j.token||null, patientId: j.patientId||null };
+    patientFlag.textContent = plato.patientId ? (plato.patientId + ' ✓') : '(sandboxed)';
+    supabaseChip.textContent = 'Supabase: OK';
+    window.SUPABASE_URL = j.SUPABASE_URL; window.SUPABASE_ANON_KEY = j.SUPABASE_ANON_KEY;
+    boot();
+  }).catch(err=>{supabaseChip.textContent='Supabase: error'; console.error(err);});
+
+  // Minimal Supabase client (no CDN dependency)
+  async function supaFetch(path, opts={}){
+    const url = (window.SUPABASE_URL||'').replace(/\/$/,'') + '/rest/v1' + path;
+    const headers = Object.assign({
+      'apikey': window.SUPABASE_ANON_KEY||'',
+      'Authorization': 'Bearer ' + (window.SUPABASE_ANON_KEY||''),
+      'Content-Type': 'application/json'
+    }, opts.headers||{});
+    const res = await fetch(url, Object.assign({}, opts, {headers}));
+    if(!res.ok){ throw new Error('Supabase error ' + res.status + ': ' + await res.text()); }
+    return res;
+  }
+
+  // UI helpers
+  const $ = (id)=>document.getElementById(id);
+  const posMsg = $('posMsg'), rxMsg=$('rxMsg'), tfMsg=$('tfMsg'), adminMsg=$('adminMsg');
+  function showErr(el, msg){ el.innerHTML = '<div class="err">'+ msg +'</div>'; }
+  function clear(el){ el.innerHTML=''; }
+
+  // Data caches
+  let products = [];
+  let cart = [];
+
+  async function loadProducts(){
+    // Try view products_with_balances first
+    try{
+      const res = await supaFetch('/products_with_balances?select=*&order=name');
+      products = await res.json();
+    }catch(e){
+      // fallback to base products
+      const res = await supaFetch('/products?select=*&order=name');
+      products = await res.json();
+      products = products.map(p=>Object.assign({on_hand_sv:0,on_hand_rh1:0},p));
+    }
+    // Fill dropdowns
+    const opts = products.map(p=>'<option value="'+p.id+'" data-price="'+(p.sell_price||p.price||0)+'">'+p.name+'</option>').join('');
+    ['posProduct','rxProduct','tfProduct'].forEach(id=>{$(id).innerHTML = '<option value="">— select —</option>'+opts;});
+  }
+
+  function refreshCart(){
+    const tb = $('cartTable').querySelector('tbody'); tb.innerHTML='';
+    let total=0;
+    cart.forEach((l,i)=>{
+      const line = (l.qty * l.price); total+=line;
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>'+l.name+'</td><td>'+l.loc+'</td><td>'+l.qty+'</td><td>'+l.price.toFixed(2)+'</td><td>'+line.toFixed(2)+'</td><td><button class="btn danger mini" data-i="'+i+'">Remove</button></td>';
+      tb.appendChild(tr);
+    });
+    $('cartItems').textContent = cart.length; $('cartTotal').textContent = total.toFixed(2);
+    tb.querySelectorAll('button').forEach(b=>b.onclick = ()=>{ cart.splice(parseInt(b.dataset.i),1); refreshCart(); });
+  }
+
+  async function postSaleLine(line){
+    const body = {
+      p_product: line.id,
+      p_loc: line.loc,
+      p_qty: line.qty,
+      p_price: line.price,
+      p_patient: $('posPatient').value || (plato.patientId||''),
+      p_doctor: $('posDoctor').value||'',
+      p_remarks: $('posRemarks').value||''
+    };
+    const res = await fetch((window.SUPABASE_URL||'') + '/rest/v1/rpc/post_sale_at', {
+      method:'POST',
+      headers:{
+        'apikey': window.SUPABASE_ANON_KEY||'',
+        'Authorization':'Bearer '+(window.SUPABASE_ANON_KEY||''),
+        'Content-Type':'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+    if(!res.ok){ throw new Error(await res.text());}
+  }
+
+  async function receiveStock(){
+    clear(rxMsg);
+    const id = $('rxProduct').value; const qty = parseInt($('rxQty').value||'0',10);
+    if(!id || qty<=0){ showErr(rxMsg,'Choose product & qty'); return; }
+    const body = { p_product:id, p_loc:'RH1', p_qty:qty };
+    const res = await fetch((window.SUPABASE_URL||'') + '/rest/v1/rpc/receive_stock',{
+      method:'POST', headers:{'apikey':window.SUPABASE_ANON_KEY,'Authorization':'Bearer '+window.SUPABASE_ANON_KEY,'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    if(!res.ok){ showErr(rxMsg, await res.text()); return; }
+    await loadInventory(); rxMsg.textContent='Received ✔';
+  }
+
+  async function transferStock(){
+    clear(tfMsg);
+    const id = $('tfProduct').value; const qty = parseInt($('tfQty').value||'0',10);
+    const from = $('tfFrom').value; const to = $('tfTo').value;
+    if(!id || qty<=0){ showErr(tfMsg,'Choose product & qty'); return; }
+    if(from===to){ showErr(tfMsg,'From & To cannot be same'); return; }
+    const body = { p_product:id, p_from:from, p_to:to, p_qty:qty };
+    const res = await fetch((window.SUPABASE_URL||'') + '/rest/v1/rpc/transfer_stock',{
+      method:'POST', headers:{'apikey':window.SUPABASE_ANON_KEY,'Authorization':'Bearer '+window.SUPABASE_ANON_KEY,'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    if(!res.ok){ showErr(tfMsg, await res.text()); return; }
+    await loadInventory(); tfMsg.textContent='Transferred ✔';
+  }
+
+  async function loadInventory(){
+    // inventory table
+    const res = await supaFetch('/products_with_balances?select=*&order=name');
+    const rows = await res.json();
+    const tb = $('invTable').querySelector('tbody'); tb.innerHTML='';
+    rows.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>'+r.name+'</td><td>'+(r.barcode||'')+'</td><td>'+(r.sell_price||r.price||0).toFixed(2)+'</td><td>'+ (r.on_hand_sv||0) +'</td><td>'+ (r.on_hand_rh1||0) +'</td><td><button class="btn mini" data-id="'+r.id+'" data-name="'+r.name+'" data-bar="'+(r.barcode||'')+'" data-price="'+(r.sell_price||r.price||0)+'">Edit</button></td>';
+      tb.appendChild(tr);
+    });
+    tb.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+      $('paName').value = b.dataset.name;
+      $('paBarcode').value = b.dataset.bar;
+      $('paPrice').value = b.dataset.price;
+      $('btnSaveProduct').dataset.id = b.dataset.id;
+      setTab('admin');
+    });
+
+    // movements
+    const txr = await supaFetch('/transactions?select=*&order=created_at.desc&limit=50');
+    const mv = await txr.json();
+    const mtb = $('mvTable').querySelector('tbody'); mtb.innerHTML='';
+    mv.forEach(t=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>'+ new Date(t.created_at).toLocaleString() +'</td><td>'+t.type+'</td><td>'+ (t.product_name||'') +'</td><td>'+ (t.from_loc||'') +'</td><td>'+ (t.to_loc||'') +'</td><td>'+ (t.qty_in||t.qty_out||0) +'</td><td>'
+        + '<button class="btn mini" data-up="'+t.id+'">Upload</button> '
+        + '<button class="btn danger mini" data-v="'+t.id+'">Void</button></td>';
+      mtb.appendChild(tr);
+    });
+    mtb.querySelectorAll('button[data-v]').forEach(b=>b.onclick=()=>voidTx(b.dataset.v));
+    mtb.querySelectorAll('button[data-up]').forEach(b=>b.onclick=()=>uploadTx(b.dataset.up));
+  }
+
+  async function voidTx(id){
+    const res = await fetch((window.SUPABASE_URL||'') + '/rest/v1/rpc/void_transaction', {
+      method:'POST', headers:{'apikey':window.SUPABASE_ANON_KEY,'Authorization':'Bearer '+window.SUPABASE_ANON_KEY,'Content-Type':'application/json'},
+      body: JSON.stringify({p_tx_id:id})
+    });
+    if(!res.ok){ alert('Void failed: '+ await res.text()); return;}
+    await loadInventory();
+  }
+
+  async function uploadTx(id){
+    // fetch tx row
+    const r = await supaFetch('/transactions?id=eq.'+encodeURIComponent(id)+'&select=*');
+    const t = (await r.json())[0];
+    if(!t){ alert('No transaction'); return; }
+    const patientId = $('posPatient').value || (plato.patientId||'');
+    if(!patientId){ alert('No patient id detected. Open from a Plato patient page or type the Patient ID.'); return; }
+
+    const html = `
+      <h3>Osler Wellness — POS Record</h3>
+      <table>
+        <tr><td><b>Date</b></td><td>${new Date(t.created_at).toLocaleString()}</td></tr>
+        <tr><td><b>Type</b></td><td>${t.type}</td></tr>
+        <tr><td><b>Product</b></td><td>${t.product_name||''}</td></tr>
+        <tr><td><b>From</b></td><td>${t.from_loc||''}</td></tr>
+        <tr><td><b>To</b></td><td>${t.to_loc||''}</td></tr>
+        <tr><td><b>Qty</b></td><td>${t.qty_in||t.qty_out||0}</td></tr>
+        <tr><td><b>Doctor</b></td><td>${t.doctor_initials||''}</td></tr>
+        <tr><td><b>Remarks</b></td><td>${t.remarks||''}</td></tr>
+      </table>`;
+
+    const res = await fetch('/api/plato-create-note', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ token: plato.token||'', patientId, html, title: 'Osler Wellness — POS' })
+    });
+    const out = await res.json().catch(()=>({}));
+    if(!res.ok || out.error){ alert('Upload error: ' + (out.error||res.status)); return; }
+    alert('Uploaded to Plato as draft ✔');
+  }
+
+  async function saveProduct(){
+    clear(adminMsg);
+    const id = document.getElementById('btnSaveProduct').dataset.id || null;
+    const name = $('paName').value.trim(), barcode = $('paBarcode').value.trim(), price = parseFloat($('paPrice').value||'0');
+    if(!name){ showErr(adminMsg, 'Name required'); return; }
+    if(id){
+      await supaFetch('/products?id=eq.'+encodeURIComponent(id), { method:'PATCH', body: JSON.stringify({name, barcode, sell_price: price}) });
+    }else{
+      await supaFetch('/products', { method:'POST', body: JSON.stringify({name, barcode, sell_price: price}) });
+    }
+    adminMsg.textContent = 'Saved ✔';
+    await loadProducts(); await loadInventory();
+  }
+
+  function boot(){
+    // load products & price defaults
+    loadProducts().then(()=>{
+      const pd = $('posProduct'); const pr = $('posPrice');
+      pd.onchange = ()=>{
+        const opt = pd.options[pd.selectedIndex];
+        pr.value = opt ? (opt.dataset.price||0) : 0;
+      };
+      ['rxProduct','tfProduct'].forEach(id=>{
+        const el = $(id); el.onchange = ()=>{};
+      });
+    });
+
+    // buttons
+    $('btnAddCart').onclick = ()=>{
+      const id = $('posProduct').value; if(!id){ showErr(posMsg,'Choose a product'); return;}
+      const p = products.find(x=>x.id===id); const qty = parseInt($('posQty').value||'0',10);
+      if(qty<=0){ showErr(posMsg,'Quantity must be > 0'); return;}
+      const price = parseFloat($('posPrice').value||'0'); const loc = $('posLoc').value;
+      cart.push({id, name:p.name, qty, price, loc}); refreshCart(); clear(posMsg);
+    };
+    $('btnSubmitCart').onclick = async ()=>{
+      clear(posMsg);
+      if(cart.length===0){ showErr(posMsg, 'Cart is empty'); return; }
+      try{
+        for(const line of cart){ await postSaleLine(line); }
+        cart = []; refreshCart(); posMsg.textContent='Submitted ✔'; await loadInventory();
+      }catch(e){ showErr(posMsg, e.message); }
+    };
+
+    $('btnReceive').onclick = receiveStock;
+    $('btnTransfer').onclick = transferStock;
+    $('btnSaveProduct').onclick = saveProduct;
+
+    // show footer
+    $('footNote').textContent = 'Build: Static UI + Netlify functions; uses /api/env and /api/plato-create-note.';
+
+    // finally, preload inventory list
+    loadInventory();
+  }
+  </script>
+</body>
+</html>
