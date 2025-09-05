@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Osler Wellness — POS & Stock</title>
+  <link rel="icon" href="/osler-wellness.webp">
+  <style>
+    :root{--bg:#0e1420;--card:#121b2b;--ink:#e9eefb;--muted:#8da3c2;--accent:#1ee0a1;--danger:#ff5b6e;}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,Segoe UI,Roboto,Arial}
+    .wrap{max-width:1100px;margin:40px auto;padding:0 16px}
+    header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+    header img{height:22px;opacity:.85} header .tag{background:#1b2335;padding:4px 10px;border-radius:999px;color:#a8c0e6;font-size:12px}
+    .tabs{display:flex;gap:8px;margin:12px 0 20px}
+    .tab{background:#1b2335;padding:8px 14px;border-radius:999px;cursor:pointer;color:#a8c0e6}
+    .tab.active{background:#26314a;color:#fff}
+    .card{background:var(--card);border-radius:14px;padding:18px;margin:12px 0}
+    .card h3{margin:0 0 12px 0;font-size:16px}
+    .grid{display:grid;gap:12px}
+    .g2{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:repeat(3,1fr)} .g4{grid-template-columns:repeat(4,1fr)}
+    @media (max-width:900px){.g2,.g3,.g4{grid-template-columns:1fr}}
+    label{display:block;color:var(--muted);font-size:12px;margin:0 0 6px}
+    input,select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #243150;background:#0f1624;color:#e9eefb}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    .btn{background:#20304a;border:0;color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer}
+    .btn.primary{background:var(--accent);color:#01261c;font-weight:600}
+    .btn.danger{background:var(--danger)}
+    .btn.small{padding:6px 10px;font-size:12px}
+    .btn:disabled{opacity:.5;cursor:not-allowed;filter:grayscale(0.3)}
+    table{width:100%;border-collapse:collapse} th,td{padding:10px;border-bottom:1px solid #1f2a40}
+    th{color:#9fb3d3;text-align:left;font-weight:600}
+    td.right{text-align:right}
+    .pill{background:#1b2335;color:#a8c0e6;padding:4px 10px;border-radius:999px;font-size:12px}
+    .error{background:#3b1220;color:#ffd6de;padding:10px 12px;border-radius:10px;margin:10px 0;display:none}
+    tr.void td{text-decoration:line-through;color:#90a1bd}
+    .muted{color:#8da3c2}
+    .section-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <img src="/osler-wellness.webp" alt="Osler Wellness"/>
+      <h2 style="margin:0">Osler Wellness — POS & Stock</h2>
+      <span id="sbBadge" class="tag">Supabase: …</span>
+      <span id="locBadge" class="tag">Locations: SV & RH1</span>
+    </header>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="pos">Dispense (POS)</div>
+      <div class="tab" data-tab="inv">Inventory & Transfer</div>
+      <div class="tab" data-tab="admin">Inventory</div>
+    </div>
+
+    <div id="toast" class="error"></div>
+
+    <!-- POS TAB -->
+    <section id="tab-pos">
+      <div class="card">
+        <div class="section-title"><h3>Dispense</h3><div class="muted" id="patientChip"></div></div>
+        <div class="grid g4">
+          <div><label>Product</label><select id="posProduct"></select></div>
+          <div><label>Location</label>
+            <select id="posLoc">
+              <option value="SV">SV</option>
+              <option value="RH1">RH1</option>
+            </select>
+          </div>
+          <div><label>Quantity</label><input type="number" id="posQty" value="1" min="1"></div>
+          <div><label>Unit Price</label><input type="number" id="posPrice" value="0" min="0" step="0.01"></div>
+        </div>
+        <div class="grid g3" style="margin-top:12px">
+          <div><label>Doctor Initials</label><input id="posDoc" placeholder="AB"></div>
+          <div><label>Dosage / Remarks</label><input id="posRemarks" placeholder="e.g., 1 tab bd"></div>
+          <div><label>Patient ID (Plato)</label><input id="posPatient" placeholder="auto if opened from patient page"></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="addToCart">+ Add to Cart</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title"><h3>Cart</h3><div class="muted">Items: <span id="cartCount">0</span> • Total: $<span id="cartTotal">0.00</span></div></div>
+        <table>
+          <thead><tr><th>Product</th><th>Loc</th><th class="right">Qty</th><th class="right">Unit</th><th class="right">Line</th><th></th></tr></thead>
+          <tbody id="cartBody"></tbody>
+        </table>
+        <div class="row" style="justify-content:flex-end;margin-top:12px">
+          <button class="btn primary" id="submitCart">✓ Submit</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title"><h3>Recent Movements</h3></div>
+        <table>
+          <thead><tr><th>Date/Time</th><th>Type</th><th>Product</th><th>From</th><th>To</th><th class="right">Qty</th><th>Actions</th></tr></thead>
+          <tbody id="txBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- INVENTORY & TRANSFER TAB -->
+    <section id="tab-inv" style="display:none">
+      <div class="card">
+        <h3>Quick Stock — Receive into RH1</h3>
+        <div class="grid g3">
+          <div><label>Product</label><select id="qsProduct"></select></div>
+          <div><label>Location</label><select id="qsLoc"><option value="RH1">RH1</option></select></div>
+          <div><label>Receive Qty</label><input type="number" id="qsQty" value="1" min="1"></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn primary" id="btnReceive">Receive to RH1</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Transfer between locations</h3>
+        <div class="grid g4">
+          <div><label>Product</label><select id="trProduct"></select></div>
+          <div><label>From</label>
+            <select id="trFrom"><option>RH1</option><option>SV</option></select>
+          </div>
+          <div><label>To</label>
+            <select id="trTo"><option>SV</option><option>RH1</option></select>
+          </div>
+          <div><label>Quantity</label><input type="number" id="trQty" value="1" min="1"></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="btnTransfer">Transfer</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title"><h3>Inventory</h3></div>
+        <table>
+          <thead><tr><th>Product</th><th>Barcode</th><th class="right">Price</th><th class="right">On Hand (SV)</th><th class="right">On Hand (RH1)</th></tr></thead>
+          <tbody id="invBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- INVENTORY TAB -->
+    <section id="tab-admin" style="display:none">
+      <div class="card">
+        <div class="section-title"><h3>Products</h3></div>
+        <div class="grid g3">
+          <div><label>Product Name</label><input id="paName" placeholder="e.g., Amoxicillin 500mg"></div>
+          <div><label>Barcode</label><input id="paBarcode" placeholder="EAN/UPC or custom"></div>
+          <div><label>Selling Price</label><input id="paPrice" type="number" min="0" step="0.01" value="0"></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn primary" id="btnSaveProduct">Save Product</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <table>
+          <thead><tr><th>Product</th><th>Barcode</th><th class="right">Price</th><th class="right">On Hand (SV)</th><th class="right">On Hand (RH1)</th></tr></thead>
+          <tbody id="paBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://zwocjuiqkmfgtenzjdcy.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3b2NqdWlxa21mZ3RlbnpqZGN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5Njk4MDEsImV4cCI6MjA3MjU0NTgwMX0.c4OyvfF3tfFM6uwaEcbUMh6WJJqythetshxThrMuAQg';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    document.getElementById('sbBadge').textContent = 'Supabase: OK';
+
+    const qs = s => document.querySelector(s); const qsa = s => [...document.querySelectorAll(s)];
+    const toast = msg => { const el=qs('#toast'); el.textContent=msg; el.style.display='block'; setTimeout(()=>el.style.display='none',3500); };
+
+    qsa('.tab').forEach(t => t.onclick = () => {
+      qsa('.tab').forEach(x => x.classList.remove('active')); t.classList.add('active');
+      ['pos','inv','admin'].forEach(id => qs('#tab-'+id).style.display = (t.dataset.tab===id)?'block':'none');
+    });
+
+    let plato = { patientId:null, patientName:null };
+    (async function loadContext(){
+      const token = new URLSearchParams(location.search).get('token');
+      if(!token) return;
+      try{
+        const r = await fetch('/.netlify/functions/plato-context?token='+encodeURIComponent(token));
+        const ctx = await r.json();
+        const dbg = (ctx && ctx.debug && ctx.debug.ctx) ? ctx.debug.ctx : {};
+        plato.patientId = ctx?.patientId || dbg?.patient?.id || dbg?.patient_id || dbg?.patientId || null;
+        plato.patientName = ctx?.patientName || dbg?.patient?.name || dbg?.patient_name || dbg?.patientName || null;
+        if(!plato.patientId){
+          const usp = new URLSearchParams(location.search);
+          plato.patientId = usp.get('patient_id') || usp.get('pid') || usp.get('patientId') || null;
+        }
+        if(plato.patientId) {
+          qs('#posPatient').value = plato.patientId;
+          qs('#patientChip').textContent = `Patient: ${plato.patientName || '#'+plato.patientId}`;
+        }
+      }catch(e){ /* ignore */ }
+    })();
+
+    let PRODUCTS = [];
+    function option(v,t){const o=document.createElement('option');o.value=v;o.textContent=t;return o;}
+
+    async function loadProducts(){
+      const { data } = await supabase.from('products_with_balances').select('*').order('name', {ascending:true});
+      PRODUCTS = data||[];
+      ['posProduct','qsProduct','trProduct'].forEach(id=>{
+        const el = qs('#'+id); el.innerHTML=''; el.appendChild(option('','— select —'));
+        PRODUCTS.forEach(p => el.appendChild(option(p.id, p.name)));
+      });
+      renderInventoryTables();
+    }
+    function findProduct(id){ return PRODUCTS.find(p=>p.id===id); }
+
+    const CART = {
+      items: [],
+      add({id, name, location, qty, price}){
+        const idx = this.items.findIndex(x => x.id===id && x.location===location && x.price===price);
+        if(idx>-1) this.items[idx].qty += qty; else this.items.push({ id, name, location, qty, price });
+        this.render();
+      },
+      remove(i){ this.items.splice(i,1); this.render(); },
+      total(){ return this.items.reduce((s,i)=>s+i.qty*i.price,0); },
+      render(){
+        qs('#cartCount').textContent = this.items.length;
+        qs('#cartTotal').textContent = this.total().toFixed(2);
+        const submitBtn = qs('#submitCart'); if(submitBtn){ submitBtn.disabled = this.items.length===0; }
+        const tb = qs('#cartBody'); tb.innerHTML='';
+        this.items.forEach((i,idx)=>{
+          const tr=document.createElement('tr');
+          tr.innerHTML = `<td>${i.name}</td><td>${i.location}</td>
+                          <td class="right">${i.qty}</td>
+                          <td class="right">${i.price.toFixed(2)}</td>
+                          <td class="right">${(i.qty*i.price).toFixed(2)}</td>
+                          <td><button class="btn small danger" onclick="CART.remove(${idx})">Remove</button></td>`;
+          tb.appendChild(tr);
+        });
+      }
+    };
+    window.CART = CART;
+
+    qs('#addToCart').onclick = () => {
+      const pid = qs('#posProduct').value; if(!pid) return toast('Choose a product');
+      const p = findProduct(pid);
+      const qty = Math.max(1, parseInt(qs('#posQty').value||'1',10));
+      const price = parseFloat(qs('#posPrice').value||p.sell_price||0);
+      const loc = qs('#posLoc').value;
+      CART.add({ id: pid, name: p.name, location: loc, qty, price });
+    };
+
+    async function submitCart(){
+      if(CART.items.length===0) return toast('Cart is empty');
+      const patient = qs('#posPatient').value.trim() || null;
+      const doc = qs('#posDoc').value.trim() || null;
+      const remarks = qs('#posRemarks').value.trim() || null;
+      try{
+        for(const i of CART.items){
+          const { error } = await supabase.rpc('post_sale_at',{
+            p_product: i.id, p_loc: i.location, p_qty: i.qty, p_price: i.price,
+            p_patient: patient, p_doctor: doc, p_remarks: remarks
+          });
+          if(error) throw error;
+        }
+        await createPatientDraftFromCart();
+        CART.items = []; CART.render();
+        await Promise.all([loadProducts(), renderTxTable()]);
+        toast('Dispense recorded');
+      }catch(e){ toast('Error: '+(e.message||e)); }
+    }
+    qs('#submitCart').onclick = (e)=>{ e.preventDefault(); submitCart(); };
+
+    function cartToHtml(items,total){
+      const rows = items.map(i=>`<tr><td>${i.name}</td><td>${i.location}</td><td>${i.qty}</td><td>${i.price.toFixed(2)}</td></tr>`).join('');
+      return `<h3>Dispensed Items</h3>
+        <table border="1" cellpadding="6" cellspacing="0">
+          <tr><th>Product</th><th>Loc</th><th>Qty</th><th>Unit</th></tr>${rows}
+        </table><p><b>Total:</b> ${total.toFixed(2)}</p>`;
+    }
+    async function createPatientDraftFromCart(){
+      const token = new URLSearchParams(location.search).get('token');
+      if(!token || CART.items.length===0) return;
+      try{
+        await fetch('/.netlify/functions/create-patient-note',{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ token, html: cartToHtml(CART.items, CART.total()), title:'Osler Wellness — Dispense' })
+        });
+      }catch(e){}
+    }
+
+    qs('#btnReceive').onclick = async () => {
+      const pid = qs('#qsProduct').value;
+      const qty = Math.max(1, parseInt(qs('#qsQty').value||'1',10));
+      if(!pid) return toast('Choose a product');
+      try{
+        const { error } = await supabase.rpc('receive_stock',{ p_product: pid, p_loc:'RH1', p_qty: qty });
+        if(error) throw error;
+        await Promise.all([loadProducts(), renderTxTable()]);
+        toast('Received into RH1');
+      }catch(e){ toast('Error: '+(e.message||e)); }
+    };
+
+    qs('#btnTransfer').onclick = async () => {
+      const pid = qs('#trProduct').value;
+      const from = qs('#trFrom').value, to = qs('#trTo').value;
+      const qty = Math.max(1, parseInt(qs('#trQty').value||'1',10));
+      if(!pid) return toast('Choose a product');
+      if(from===to) return toast('From and To cannot be the same');
+      try{
+        const { error } = await supabase.rpc('transfer_stock',{ p_product: pid, p_from: from, p_to: to, p_qty: qty });
+        if(error) throw error;
+        await Promise.all([loadProducts(), renderTxTable()]);
+        toast('Transfer recorded');
+      }catch(e){ toast('Error: '+(e.message||e)); }
+    };
+
+    async function renderInventoryTables(){
+      const rows = PRODUCTS.map(p=>`
+        <tr>
+          <td>${p.name}</td>
+          <td>${p.barcode||''}</td>
+          <td class="right">${(p.sell_price||0).toFixed(2)}</td>
+          <td class="right">${p.on_hand_sv||0}</td>
+          <td class="right">${p.on_hand_rh1||0}</td>
+        </tr>`).join('');
+      qs('#invBody').innerHTML = rows;
+      qs('#paBody').innerHTML = rows;
+      const pid = qs('#posProduct').value; if(pid){ const pr = findProduct(pid); if(pr) qs('#posPrice').value = pr.sell_price||0; }
+    }
+
+    qs('#posProduct').addEventListener('change', ()=>{
+      const p = findProduct(qs('#posProduct').value); if(p) qs('#posPrice').value = p.sell_price||0;
+    });
+
+    qs('#btnSaveProduct').onclick = async () => {
+      const name = qs('#paName').value.trim(); if(!name) return toast('Name required');
+      const barcode = qs('#paBarcode').value.trim() || null;
+      const price = parseFloat(qs('#paPrice').value || '0');
+      try{
+        let { data, error } = await supabase.from('products').select('id').eq('barcode', barcode).maybeSingle();
+        if(error) throw error;
+        if(data){
+          const { error:e2 } = await supabase.from('products').update({ name, sell_price: price }).eq('id', data.id);
+          if(e2) throw e2;
+        }else{
+          const { error:e3 } = await supabase.from('products').insert({ name, barcode, sell_price: price });
+          if(e3) throw e3;
+        }
+        qs('#paName').value=''; qs('#paBarcode').value=''; qs('#paPrice').value='0';
+        await loadProducts(); toast('Saved');
+      }catch(e){ toast('Error: '+(e.message||e)); }
+    };
+
+    async function renderTxTable(){
+      const tb = qs('#txBody'); tb.innerHTML='';
+      const { data } = await supabase.from('transactions').select('*').order('created_at', {ascending:false}).limit(50);
+      (data||[]).forEach(row=>{
+        const tr = document.createElement('tr'); if(row.voided) tr.classList.add('void');
+        tr.innerHTML = `
+          <td>${new Date(row.created_at).toLocaleString()}</td>
+          <td>${row.type}</td>
+          <td>${row.product_name||''}</td>
+          <td>${row.from_loc||''}</td>
+          <td>${row.to_loc||''}</td>
+          <td class="right">${row.qty_in || row.qty_out || 0}</td>
+          <td>${row.voided?'<span class="muted">voided</span>':`<button class="btn small danger" onclick="voidTx('${row.id}')">Void</button>`}</td>`;
+        tb.appendChild(tr);
+      });
+    }
+
+    async function voidTx(id){
+      try{
+        const { error } = await supabase.rpc('void_transaction',{ p_tx_id: id });
+        if(error) throw error;
+        await Promise.all([loadProducts(), renderTxTable()]);
+        toast('Transaction voided');
+      }catch(e){ toast('Error: '+(e.message||e)); }
+    }
+    window.voidTx = voidTx;
+
+    (async function(){ await loadProducts(); await renderTxTable(); })();
+  </script>
+</body>
+</html>
