@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Osler Wellness — POS & Stock</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#0b1220; --fg:#e5e7eb; --muted:#94a3b8; --accent:#10b981; --danger:#ef4444; }
+    *{box-sizing:border-box} body{margin:0;font:14px/1.45 system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--fg);background:var(--bg);}
+    .wrap{max-width:1100px;margin:24px auto;padding:0 16px}
+    .card{background:linear-gradient(180deg,var(--panel),#0a0f1b);border:1px solid #1f2a44;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 6px 22px rgba(0,0,0,.25)}
+    h1{font-size:22px;margin:8px 0 16px;display:flex;gap:10px;align-items:center}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .col{flex:1;min-width:220px}
+    label{display:block;font-size:12px;color:var(--muted);margin:6px 0}
+    input,select{width:100%;padding:10px;background:#0b1322;border:1px solid #22304d;border-radius:10px;color:#e8edf7}
+    button{border:0;border-radius:12px;padding:10px 14px;cursor:pointer}
+    .primary{background:var(--accent);color:#03251d;font-weight:700}
+    .danger{background:var(--danger);color:#fff}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px;border-bottom:1px solid #1f2a44;text-align:left}
+    .pill{background:#0e1a30;border:1px solid #253a66;color:#cbd5e1;border-radius:999px;padding:4px 10px;font-size:12px;margin-left:8px}
+    .tabs{display:flex;gap:8px;margin:6px 0 16px}
+    .tab{padding:8px 12px;border-radius:999px;border:1px solid #22304d;background:#0b1322;color:#cbd5e1;cursor:pointer}
+    .tab.active{background:#12203a;color:#fff}
+    .note{color:#93c5fd;font-size:12px}
+  </style>
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./plato-context.js"></script>
+
+<div class="wrap">
+  <h1>Osler Wellness — POS & Stock
+    <span id="sb-badge" class="pill">Supabase: …</span>
+    <span class="pill">Locations: SV & RH1</span>
+  </h1>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('pos')">Dispense (POS)</button>
+    <button class="tab" onclick="showTab('inv')">Inventory & Transfer</button>
+    <button class="tab" onclick="showTab('admin')">Product Admin</button>
+  </div>
+
+  <!-- POS -->
+  <div id="tab-pos" class="card">
+    <h3 style="margin:0 0 10px">Dispense</h3>
+    <div class="row">
+      <div class="col">
+        <label>Product</label>
+        <select id="pos-product"></select>
+      </div>
+      <div class="col">
+        <label>Location</label>
+        <select id="pos-loc">
+          <option>SV</option>
+          <option selected>RH1</option>
+        </select>
+      </div>
+      <div class="col">
+        <label>Quantity</label>
+        <input id="pos-qty" type="number" min="1" value="1" />
+      </div>
+      <div class="col">
+        <label>Unit Price</label>
+        <input id="pos-price" type="number" step="0.01" min="0" value="0" />
+      </div>
+    </div>
+    <div class="row">
+      <div class="col">
+        <label>Doctor Initials</label>
+        <input id="pos-doctor" placeholder="e.g., LH" />
+      </div>
+      <div class="col">
+        <label>Dosage / Remarks</label>
+        <input id="pos-remarks" placeholder="e.g., 1 tab per day" />
+      </div>
+      <div class="col">
+        <label>Patient ID (Plato)</label>
+        <input id="pos-patient" placeholder="auto from patient tab or URL" />
+      </div>
+      <div class="col" style="display:flex;align-items:flex-end;gap:8px">
+        <button class="primary" onclick="submitSale()">+ Submit</button>
+      </div>
+    </div>
+    <div class="note" id="pos-note"></div>
+  </div>
+
+  <!-- Inventory & Transfer -->
+  <div id="tab-inv" class="card" style="display:none">
+    <h3 style="margin:0 0 10px">Quick Stock — Receive into RH1</h3>
+    <div class="row">
+      <div class="col">
+        <label>Product</label>
+        <select id="rcv-product"></select>
+      </div>
+      <div class="col">
+        <label>Location</label>
+        <select id="rcv-loc">
+          <option>SV</option>
+          <option selected>RH1</option>
+        </select>
+      </div>
+      <div class="col">
+        <label>Receive Qty</label>
+        <input id="rcv-qty" type="number" min="1" value="1" />
+      </div>
+      <div class="col" style="display:flex;align-items:flex-end">
+        <button class="primary" onclick="receive()">Receive</button>
+      </div>
+    </div>
+
+    <h3 style="margin:20px 0 10px">Transfer between locations</h3>
+    <div class="row">
+      <div class="col">
+        <label>Product</label>
+        <select id="xfer-product"></select>
+      </div>
+      <div class="col">
+        <label>From</label>
+        <select id="xfer-from">
+          <option selected>RH1</option>
+          <option>SV</option>
+        </select>
+      </div>
+      <div class="col">
+        <label>To</label>
+        <select id="xfer-to">
+          <option>RH1</option>
+          <option selected>SV</option>
+        </select>
+      </div>
+      <div class="col">
+        <label>Quantity</label>
+        <input id="xfer-qty" type="number" min="1" value="1" />
+      </div>
+      <div class="col" style="display:flex;align-items:flex-end">
+        <button class="primary" onclick="transfer()">Transfer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product Admin -->
+  <div id="tab-admin" class="card" style="display:none">
+    <h3 style="margin:0 0 10px">Products</h3>
+    <div class="row">
+      <div class="col"><label>Name</label><input id="p-name" placeholder="e.g., Amoxicillin 500mg" /></div>
+      <div class="col"><label>Barcode</label><input id="p-bar" placeholder="EAN/UPC" /></div>
+      <div class="col"><label>Selling Price</label><input id="p-price" type="number" step="0.01" min="0" /></div>
+      <div class="col" style="display:flex;align-items:flex-end"><button class="primary" onclick="saveProduct()">Save Product</button></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <table id="prod-table">
+        <thead><tr><th>Product</th><th>Barcode</th><th>Price</th><th>On Hand (SV)</th><th>On Hand (RH1)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 10px">Recent Movements</h3>
+    <table id="tx-table">
+      <thead><tr><th>Date/Time</th><th>Type</th><th>Product</th><th>From</th><th>To</th><th>Qty</th><th>Actions</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  // Configure Supabase (fallback to inline constants if env not present)
+  window._OW_SUPABASE_URL = window._OW_SUPABASE_URL || "https://zwocjuiqkmfgtenzjdcy.supabase.co";
+  window._OW_SUPABASE_ANON = window._OW_SUPABASE_ANON || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3b2NqdWlxa21mZ3RlbnpqZGN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5Njk4MDEsImV4cCI6MjA3MjU0NTgwMX0.c4OyvfF3tfFM6uwaEcbUMh6WJJqythetshxThrMuAQg";
+
+  const sb = window.supabase.createClient(OW.supabaseUrl, OW.supabaseAnon);
+  document.getElementById('sb-badge').textContent = 'Supabase: OK';
+
+  const $ = (id)=>document.getElementById(id);
+
+  function setActive(tab){
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('[id^="tab-"]').forEach(p=>p.style.display='none');
+    document.querySelector(`[onclick="showTab('${tab}')"]`).classList.add('active');
+    document.getElementById(`tab-${tab}`).style.display='block';
+  }
+  window.showTab=setActive;
+
+  async function loadProducts(){
+    const { data, error } = await sb.from('products_with_balances').select('*').order('name');
+    const selects = [$('pos-product'), $('rcv-product'), $('xfer-product')];
+    selects.forEach(sel=>{ sel.innerHTML=''; });
+    (data||[]).forEach(p=>{
+      const opt = (p)=>`<option value="${p.id}" data-price="${p.sell_price}">${p.name}</option>`;
+      selects.forEach(sel=> sel.insertAdjacentHTML('beforeend', opt(p)));
+    });
+    // set price default
+    const sel = $('pos-product');
+    if (sel && sel.selectedOptions.length){
+      $('pos-price').value = sel.selectedOptions[0].dataset.price || 0;
+    }
+  }
+
+  $('pos-product').addEventListener('change', e=>{
+    $('pos-price').value = e.target.selectedOptions[0].dataset.price || 0;
+  });
+
+  async function saveProduct(){
+    const name = $('p-name').value.trim();
+    const barcode = $('p-bar').value.trim() || null;
+    const sell_price = parseFloat($('p-price').value || '0');
+    if(!name){ alert('Name required'); return; }
+    const { error } = await sb.from('products').insert({ name, barcode, sell_price });
+    if(error){ alert('Save error: '+error.message); return; }
+    $('p-name').value=''; $('p-bar').value=''; $('p-price').value='';
+    loadProducts(); loadRecent();
+  }
+
+  async function submitSale(){
+    const product = $('pos-product').value;
+    const loc = $('pos-loc').value;
+    const qty = parseInt($('pos-qty').value||'0',10);
+    const price = parseFloat($('pos-price').value||'0');
+    const patient = $('pos-patient').value.trim() || OW.patientId || null;
+    const dr = $('pos-doctor').value.trim() || null;
+    const remarks = $('pos-remarks').value.trim() || null;
+
+    try{
+      const { error } = await sb.rpc('post_sale_at', {
+        p_product: product, p_loc: loc, p_qty: qty, p_price: price,
+        p_patient: patient, p_doctor: dr, p_remarks: remarks
+      });
+      if(error) throw error;
+      $('pos-note').textContent = 'Saved ✔';
+      loadRecent();
+    }catch(e){
+      $('pos-note').textContent = 'Error: '+e.message;
+      alert('Error: '+e.message);
+    }
+  }
+
+  async function receive(){
+    const product = $('rcv-product').value;
+    const loc = $('rcv-loc').value;
+    const qty = parseInt($('rcv-qty').value||'0',10);
+    const { error } = await sb.rpc('receive_stock', { p_product: product, p_loc: loc, p_qty: qty });
+    if(error){ alert(error.message); return; }
+    loadProducts(); loadRecent();
+  }
+
+  async function transfer(){
+    const product = $('xfer-product').value;
+    const from = $('xfer-from').value;
+    const to = $('xfer-to').value;
+    const qty = parseInt($('xfer-qty').value||'0',10);
+    const { error } = await sb.rpc('transfer_stock', { p_product: product, p_from: from, p_to: to, p_qty: qty });
+    if(error){ alert(error.message); return; }
+    loadProducts(); loadRecent();
+  }
+
+  async function loadRecent(){
+    const { data, error } = await sb.from('transactions')
+      .select('id, created_at, type, product_name, from_loc, to_loc, qty_in, qty_out, voided')
+      .order('created_at', { ascending:false }).limit(50);
+    const tb = $('tx-table').querySelector('tbody');
+    tb.innerHTML = '';
+    (data||[]).forEach(r=>{
+      const qty = r.qty_in>0 ? r.qty_in : r.qty_out;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${new Date(r.created_at).toLocaleString()}</td>
+        <td>${r.type}</td>
+        <td>${r.product_name||''}</td>
+        <td>${r.from_loc||''}</td>
+        <td>${r.to_loc||''}</td>
+        <td>${qty}</td>
+        <td>
+          <button class="danger" onclick="voidTx('${r.id}')" ${r.voided?'disabled':''}>Void</button>
+        </td>`;
+      tb.appendChild(tr);
+    });
+  }
+
+  async function voidTx(id){
+    const yes = confirm('Void this transaction? This will reverse stock movement.');
+    if(!yes) return;
+    const { error } = await sb.rpc('void_transaction', { p_tx_id: id });
+    if(error){ alert(error.message); return; }
+    loadProducts(); loadRecent();
+  }
+
+  async function fillPatient(){
+    const pid = OW.patientId;
+    if(pid){ $('pos-patient').value = pid; }
+  }
+
+  async function fillInventoryTable(){
+    const { data, error } = await sb.from('products_with_balances').select('*').order('name');
+    const tb = document.querySelector('#prod-table tbody');
+    tb.innerHTML='';
+    (data||[]).forEach(p=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${p.name}</td><td>${p.barcode||''}</td><td>${Number(p.sell_price).toFixed(2)}</td>
+        <td>${p.on_hand_sv}</td><td>${p.on_hand_rh1}</td>`;
+      tb.appendChild(tr);
+    });
+  }
+
+  (async function init(){
+    await loadProducts();
+    await loadRecent();
+    await fillInventoryTable();
+    await fillPatient();
+    setActive('pos');
+  })();
+</script>
+</body>
+</html>

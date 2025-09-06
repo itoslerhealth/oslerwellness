@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Osler Wellness — Patient Dispenses</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#0b1220; --fg:#e5e7eb; --muted:#94a3b8; --accent:#10b981; }
+    *{box-sizing:border-box} body{margin:0;font:14px/1.45 system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--fg);background:var(--bg);}
+    .wrap{max-width:1100px;margin:24px auto;padding:0 16px}
+    .card{background:linear-gradient(180deg,var(--panel),#0a0f1b);border:1px solid #1f2a44;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 6px 22px rgba(0,0,0,.25)}
+    h1{font-size:22px;margin:8px 0 16px;display:flex;gap:10px;align-items:center}
+    .pill{background:#0e1a30;border:1px solid #253a66;color:#cbd5e1;border-radius:999px;padding:4px 10px;font-size:12px;margin-left:8px}
+    button{border:0;border-radius:12px;padding:10px 14px;cursor:pointer}
+    .primary{background:var(--accent);color:#03251d;font-weight:700}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px;border-bottom:1px solid #1f2a44;text-align:left}
+  </style>
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./plato-context.js"></script>
+
+<div class="wrap">
+  <h1>Osler Wellness — Patient Dispenses
+    <span id="pid" class="pill">patient: …</span>
+    <span id="sb" class="pill">Supabase: …</span>
+  </h1>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="color:#94a3b8">Only dispenses for this patient are shown.</div>
+      <div>
+        <button class="primary" id="open-app">Dispense (open app)</button>
+      </div>
+    </div>
+    <table id="pt-table">
+      <thead><tr><th>Date</th><th>Product</th><th>Qty</th><th>Doctor</th><th>Dosage/Remarks</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  window._OW_SUPABASE_URL = window._OW_SUPABASE_URL || "https://zwocjuiqkmfgtenzjdcy.supabase.co";
+  window._OW_SUPABASE_ANON = window._OW_SUPABASE_ANON || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3b2NqdWlxa21mZ3RlbnpqZGN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5Njk4MDEsImV4cCI6MjA3MjU0NTgwMX0.c4OyvfF3tfFM6uwaEcbUMh6WJJqythetshxThrMuAQg";
+
+  const sb = window.supabase.createClient(OW.supabaseUrl, OW.supabaseAnon);
+  document.getElementById('sb').textContent = 'Supabase: OK';
+
+  const pid = OW.patientId || '';
+  document.getElementById('pid').textContent = 'patient: ' + (pid||'n/a');
+
+  document.getElementById('open-app').addEventListener('click', ()=>{
+    const url = new URL('./index.html', window.location.href);
+    if(pid) url.searchParams.set('patient_id', pid);
+    window.open(url.toString(), '_blank');
+  });
+
+  async function loadPatientDispenses(){
+    if(!pid) return;
+    const { data, error } = await sb.from('transactions')
+      .select('created_at, product_name, qty_out, doctor_initials, remarks')
+      .eq('type','sale')
+      .eq('patient_id', pid)
+      .order('created_at', { ascending: false });
+    const tb = document.querySelector('#pt-table tbody');
+    tb.innerHTML='';
+    (data||[]).forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${new Date(r.created_at).toLocaleString()}</td>
+        <td>${r.product_name||''}</td><td>${r.qty_out}</td>
+        <td>${r.doctor_initials||''}</td><td>${r.remarks||''}</td>`;
+      tb.appendChild(tr);
+    });
+  }
+
+  loadPatientDispenses();
+</script>
+</body>
+</html>
