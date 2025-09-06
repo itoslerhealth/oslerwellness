@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Osler Wellness — POS & Stock</title>
+  <link rel="icon" href="/osler-wellness.webp">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.4/dist/tailwind.min.css">
+  <style>
+    html,body { background: #0b1220; color: #e2e8f0; }
+    .card { background:#0f172a; border:1px solid #1f2a44; border-radius:14px; padding:16px; }
+    .pill { font-size:11px; border:1px solid #1f2a44; background:#0b1428; padding:.15rem .5rem; border-radius:999px; }
+    input, select { background:#0b1428; border:1px solid #203154; border-radius:10px; padding:.55rem .7rem; outline:none; }
+    input:focus, select:focus { border-color:#3b82f6; }
+    table th, table td { padding-right:1rem; }
+    .btn { padding:.55rem .8rem; border-radius:10px; background:#1e293b; }
+    .btn-primary { background:#10b981; color:#fff; }
+    .btn-danger { background:#dc2626; color:#fff; }
+    .btn:hover { filter:brightness(1.07); }
+    .hidden { display:none; }
+  </style>
+</head>
+<body class="p-4 md:p-6">
+  <div class="max-w-7xl mx-auto">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-2">
+        <img src="/osler-wellness.webp" style="height:22px" alt="logo">
+        <h1 class="text-xl font-semibold">Osler Wellness — POS & Stock</h1>
+      </div>
+      <div class="flex gap-2">
+        <span class="pill">Supabase: OK</span>
+        <span class="pill">Locations: SV & RH1</span>
+      </div>
+    </div>
+
+    <div class="mb-4 flex gap-2">
+      <button id="tab-pos" class="btn btn-primary">Dispense (POS)</button>
+      <button id="tab-inv" class="btn">Inventory & Transfer</button>
+      <button id="tab-admin" class="btn">Product Admin</button>
+      <button id="tab-moves" class="btn">Recent Movements</button>
+    </div>
+
+    <div id="view-pos" class="card">
+      <div class="grid md:grid-cols-6 gap-3 items-end">
+        <div class="md:col-span-2">
+          <label class="block text-xs mb-1">Product</label>
+          <select id="pos-product" class="w-full"></select>
+        </div>
+        <div>
+          <label class="block text-xs mb-1">Location</label>
+          <select id="pos-loc" class="w-full">
+            <option value="SV">SV</option>
+            <option value="RH1">RH1</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs mb-1">Quantity</label>
+          <input id="pos-qty" type="number" min="1" value="1" class="w-full">
+        </div>
+        <div>
+          <label class="block text-xs mb-1">Unit Price</label>
+          <input id="pos-price" type="number" step="0.01" value="0" class="w-full">
+        </div>
+        <div class="md:col-span-1 md:text-right">
+          <button id="pos-add" class="btn btn-primary w-full md:w-auto">+ Add to Cart</button>
+        </div>
+        <div class="md:col-span-3">
+          <label class="block text-xs mb-1">Doctor Initials</label>
+          <input id="pos-doctor" placeholder="e.g., AB" class="w-full">
+        </div>
+        <div class="md:col-span-3">
+          <label class="block text-xs mb-1">Dosage / Remarks</label>
+          <input id="pos-remarks" placeholder="e.g., 1 tab bd" class="w-full">
+        </div>
+        <div class="md:col-span-3">
+          <label class="block text-xs mb-1">Patient ID (Plato)</label>
+          <input id="pos-patient" placeholder="auto if opened from patient page" class="w-full">
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <h3 class="font-semibold mb-2">Cart</h3>
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-left text-slate-300">
+                <th class="py-2 pr-4">Product</th>
+                <th class="py-2 pr-4">Loc</th>
+                <th class="py-2 pr-4">Qty</th>
+                <th class="py-2 pr-4">Unit</th>
+                <th class="py-2 pr-4">Line</th>
+                <th class="py-2 pr-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="cart-rows"></tbody>
+          </table>
+        </div>
+        <div class="mt-3 flex items-center gap-3">
+          <span id="cart-summary" class="text-sm text-slate-300">Items: 0 · Total: $0.00</span>
+          <button id="pos-submit" class="btn btn-primary">✔ Submit</button>
+          <span id="pos-msg" class="text-sm text-rose-400"></span>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-inv" class="card hidden">
+      <h3 class="font-semibold mb-2">Inventory & Transfer</h3>
+      <div class="grid md:grid-cols-6 gap-3 items-end">
+        <div class="md:col-span-3">
+          <label class="block text-xs mb-1">Quick Stock — Receive into RH1</label>
+          <div class="grid md:grid-cols-3 gap-2">
+            <select id="rec-product"></select>
+            <input id="rec-qty" type="number" min="1" value="1">
+            <button id="rec-btn" class="btn btn-primary">Receive to RH1</button>
+          </div>
+        </div>
+        <div class="md:col-span-3">
+          <label class="block text-xs mb-1">Transfer between locations</label>
+          <div class="grid md:grid-cols-4 gap-2">
+            <select id="tr-product"></select>
+            <select id="tr-from"><option>RH1</option><option>SV</option></select>
+            <select id="tr-to"><option>SV</option><option>RH1</option></select>
+            <div class="flex gap-2">
+              <input id="tr-qty" type="number" min="1" value="1" class="w-24">
+              <button id="tr-btn" class="btn btn-primary">Transfer</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-6">
+        <h4 class="font-semibold mb-2">Inventory</h4>
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-left text-slate-300">
+                <th class="py-2 pr-4">Product</th>
+                <th class="py-2 pr-4">Barcode</th>
+                <th class="py-2 pr-4">Price</th>
+                <th class="py-2 pr-4">On Hand (SV)</th>
+                <th class="py-2 pr-4">On Hand (RH1)</th>
+                <th class="py-2 pr-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="inv-rows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="inv-msg" class="text-sm text-rose-400 mt-2"></div>
+    </div>
+
+    <div id="view-admin" class="card hidden">
+      <h3 class="font-semibold mb-3">Product Admin</h3>
+      <div class="grid md:grid-cols-4 gap-3 items-end">
+        <input id="pa-name" placeholder="Product Name">
+        <input id="pa-barcode" placeholder="Barcode">
+        <input id="pa-price" type="number" step="0.01" placeholder="Selling Price">
+        <button id="pa-save" class="btn btn-primary">Save Product</button>
+      </div>
+      <div id="pa-msg" class="text-sm text-rose-400 mt-2"></div>
+    </div>
+
+    <div id="view-moves" class="card hidden">
+      <h3 class="font-semibold mb-3">Recent Movements</h3>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="text-left text-slate-300">
+              <th class="py-2 pr-4">Date/Time</th>
+              <th class="py-2 pr-4">Type</th>
+              <th class="py-2 pr-4">Product</th>
+              <th class="py-2 pr-4">From</th>
+              <th class="py-2 pr-4">To</th>
+              <th class="py-2 pr-4">Qty</th>
+              <th class="py-2 pr-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="mv-rows"></tbody>
+        </table>
+      </div>
+      <div id="mv-msg" class="text-sm text-rose-400 mt-2"></div>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script>
+  const SUPABASE_URL = "https://zwocjuiqkmfgtenzjdcy.supabase.co";
+  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3b2NqdWlxa21mZ3RlbnpqZGN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5Njk4MDEsImV4cCI6MjA3MjU0NTgwMX0.c4OyvfF3tfFM6uwaEcbUMh6WJJqythetshxThrMuAQg";
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+  const qs = new URLSearchParams(location.search);
+  const prefillPatient = qs.get('patient_id') || '';
+
+  function sel(id) { return document.getElementById(id); }
+  const tabs = [
+    ['tab-pos','view-pos'],
+    ['tab-inv','view-inv'],
+    ['tab-admin','view-admin'],
+    ['tab-moves','view-moves'],
+  ];
+  tabs.forEach(([btn,view]) => sel(btn).addEventListener('click', () => setTab(view, btn)));
+  function setTab(viewId, btnId) {
+    tabs.forEach(([b,v]) => { sel(v).classList.add('hidden'); sel(b).classList.remove('btn-primary'); });
+    sel(viewId).classList.remove('hidden'); sel(btnId).classList.add('btn-primary');
+  }
+  if (qs.get('view') === 'pos') setTab('view-pos','tab-pos');
+
+  async function loadProducts() {
+    const { data, error } = await supabase.from('products_with_balances').select('*').order('name');
+    const selects = [sel('pos-product'), sel('rec-product'), sel('tr-product')];
+    selects.forEach(s => s.innerHTML = '<option value=\"\">— select —</option>');
+    if (error) { console.error(error); return; }
+    data.forEach(p => {
+      const put = (v) => { const o=document.createElement('option'); o.value=p.id; o.textContent=p.name; v.appendChild(o); };
+      selects.forEach(put);
+    });
+    sel('pos-product').addEventListener('change', () => {
+      const p = data.find(x => x.id === sel('pos-product').value);
+      sel('pos-price').value = p ? (p.sell_price || 0) : 0;
+    });
+    renderInventory(data);
+  }
+
+  function money(n) { return Number(n||0).toFixed(2); }
+
+  function renderInventory(list) {
+    const tbody = sel('inv-rows');
+    if (!list || list.length===0) { tbody.innerHTML = '<tr><td class="py-2 text-slate-400">No products</td></tr>'; return; }
+    tbody.innerHTML = list.map(p => `
+      <tr class="border-t border-slate-700">
+        <td class="py-2 pr-4">${p.name}</td>
+        <td class="py-2 pr-4">${p.barcode||''}</td>
+        <td class="py-2 pr-4">${money(p.sell_price)}</td>
+        <td class="py-2 pr-4">${p.on_hand_sv}</td>
+        <td class="py-2 pr-4">${p.on_hand_rh1}</td>
+        <td class="py-2 pr-4"><button class="btn" onclick="editProduct('${p.id}')">Edit</button></td>
+      </tr>`).join('');
+  }
+
+  async function editProduct(pid) {
+    const { data, error } = await supabase.from('products').select('*').eq('id', pid).single();
+    if (error || !data) return alert('Cannot load product');
+    sel('pa-name').value = data.name || '';
+    sel('pa-barcode').value = data.barcode || '';
+    sel('pa-price').value = data.sell_price || 0;
+    sel('tab-admin').click();
+    sel('pa-save').dataset.pid = pid;
+  }
+
+  sel('pa-save').addEventListener('click', async () => {
+    const pid = sel('pa-save').dataset.pid;
+    const payload = {
+      name: sel('pa-name').value.trim(),
+      barcode: sel('pa-barcode').value.trim() || null,
+      sell_price: Number(sel('pa-price').value||0)
+    };
+    let resp;
+    if (pid) resp = await supabase.from('products').update(payload).eq('id', pid).select();
+    else resp = await supabase.from('products').insert(payload).select();
+    if (resp.error) { sel('pa-msg').textContent = resp.error.message; return; }
+    sel('pa-msg').textContent = 'Saved.';
+    sel('pa-save').dataset.pid = '';
+    await loadProducts();
+  });
+
+  const cart = [];
+  function refreshCart() {
+    const tbody = sel('cart-rows');
+    if (cart.length===0) { tbody.innerHTML = ''; sel('cart-summary').textContent='Items: 0 · Total: $0.00'; return; }
+    let total=0;
+    tbody.innerHTML = cart.map((c,i) => {
+      const line = Number(c.qty) * Number(c.price);
+      total += line;
+      return `<tr class="border-t border-slate-700">
+        <td class="py-2 pr-4">${c.product_name}</td>
+        <td class="py-2 pr-4">${c.loc}</td>
+        <td class="py-2 pr-4">${c.qty}</td>
+        <td class="py-2 pr-4">${money(c.price)}</td>
+        <td class="py-2 pr-4">${money(line)}</td>
+        <td class="py-2 pr-4"><button class="btn btn-danger" onclick="removeCart(${i})">Remove</button></td>
+      </tr>`;
+    }).join('');
+    sel('cart-summary').textContent = `Items: ${cart.length} · Total: $${money(total)}`;
+  }
+  window.removeCart = (i) => { cart.splice(i,1); refreshCart(); };
+
+  sel('pos-add').addEventListener('click', () => {
+    const pid = sel('pos-product').value;
+    if (!pid) return;
+    const productText = sel('pos-product').selectedOptions[0].textContent;
+    cart.push({
+      product_id: pid,
+      product_name: productText,
+      loc: sel('pos-loc').value,
+      qty: Number(sel('pos-qty').value||0),
+      price: Number(sel('pos-price').value||0),
+      patient: sel('pos-patient').value.trim(),
+      doctor: sel('pos-doctor').value.trim(),
+      remarks: sel('pos-remarks').value.trim()
+    });
+    refreshCart();
+  });
+
+  sel('pos-patient').value = prefillPatient;
+
+  sel('pos-submit').addEventListener('click', async () => {
+    sel('pos-msg').textContent = '';
+    for (const line of cart) {
+      const { error } = await supabase.rpc('post_sale_at', {
+        p_product: line.product_id,
+        p_loc: line.loc,
+        p_qty: line.qty,
+        p_price: line.price,
+        p_patient: line.patient || prefillPatient || null,
+        p_doctor: line.doctor || null,
+        p_remarks: line.remarks || null
+      });
+      if (error) { sel('pos-msg').textContent = 'Error: '+error.message; return; }
+    }
+    cart.length = 0;
+    refreshCart();
+    sel('pos-msg').textContent = 'Submitted.';
+    await loadMovements();
+    await loadProducts();
+  });
+
+  sel('rec-btn').addEventListener('click', async () => {
+    const pid = sel('rec-product').value; const qty = Number(sel('rec-qty').value||0);
+    const { error } = await supabase.rpc('receive_stock', { p_product: pid, p_loc:'RH1', p_qty: qty });
+    sel('inv-msg').textContent = error ? ('Error: '+error.message) : 'Received.';
+    await loadProducts(); await loadMovements();
+  });
+
+  sel('tr-btn').addEventListener('click', async () => {
+    const pid = sel('tr-product').value; const f=sel('tr-from').value; const t=sel('tr-to').value; const q=Number(sel('tr-qty').value||0);
+    const { error } = await supabase.rpc('transfer_stock', { p_product: pid, p_from:f, p_to:t, p_qty:q });
+    sel('inv-msg').textContent = error ? ('Error: '+error.message) : 'Transferred.';
+    await loadProducts(); await loadMovements();
+  });
+
+  async function loadMovements() {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('id, created_at, type, product_name, from_loc, to_loc, qty_in, qty_out, voided')
+      .order('created_at', { ascending:false }).limit(100);
+    const tbody = sel('mv-rows');
+    if (error) { tbody.innerHTML = '<tr><td class="py-2 text-rose-400">Error loading</td></tr>'; return; }
+    if (!data || data.length===0) { tbody.innerHTML = '<tr><td class="py-2 text-slate-400">No movements</td></tr>'; return; }
+    tbody.innerHTML = data.map(r => {
+      const qty = r.qty_in || r.qty_out || 0;
+      const disabled = r.voided ? 'opacity-50 pointer-events-none' : '';
+      return `<tr class="border-t border-slate-700">
+        <td class="py-2 pr-4">${new Date(r.created_at).toLocaleString()}</td>
+        <td class="py-2 pr-4">${r.type}</td>
+        <td class="py-2 pr-4">${r.product_name||''}</td>
+        <td class="py-2 pr-4">${r.from_loc||''}</td>
+        <td class="py-2 pr-4">${r.to_loc||''}</td>
+        <td class="py-2 pr-4">${qty}</td>
+        <td class="py-2 pr-4">
+          <button class="btn btn-danger ${disabled}" onclick="voidTx('${r.id}')">Void</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+  window.voidTx = async (id) => {
+    const { error } = await supabase.rpc('void_transaction', { p_tx_id: id });
+    sel('mv-msg').textContent = error ? ('Error: '+error.message) : 'Voided.';
+    await loadMovements(); await loadProducts();
+  };
+
+  (async () => {
+    await loadProducts();
+    await loadMovements();
+  })();
+  </script>
+</body>
+</html>

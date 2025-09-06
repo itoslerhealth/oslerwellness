@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Osler Wellness — Patient</title>
+  <link rel="icon" href="/osler-wellness.webp">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.4/dist/tailwind.min.css">
+  <style>
+    html,body { background: #0b1220; color: #e2e8f0; }
+    .card { background:#0f172a; border:1px solid #1f2a44; border-radius:14px; padding:16px; }
+    table th, table td { padding-right:1rem; }
+  </style>
+</head>
+<body class="p-4 md:p-6">
+  <div id="app" class="max-w-6xl mx-auto"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script>
+  const SUPABASE_URL = "https://zwocjuiqkmfgtenzjdcy.supabase.co";
+  const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3b2NqdWlxa21mZ3RlbnpqZGN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5Njk4MDEsImV4cCI6MjA3MjU0NTgwMX0.c4OyvfF3tfFM6uwaEcbUMh6WJJqythetshxThrMuAQg";
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+  function b64urlToJson(b64url) {
+    try {
+      const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(decodeURIComponent(escape(atob(b64))));
+    } catch (e) { return {}; }
+  }
+  function resolvePatientId() {
+    const qs = new URLSearchParams(location.search);
+    const pid = qs.get('patient_id');
+    if (pid) return pid;
+    const token = qs.get('token');
+    if (token && token.split('.').length===3) {
+      const payload = b64urlToJson(token.split('.')[1]);
+      return payload.patient_id || (payload.patient && (payload.patient.id || payload.patient.number)) || null;
+    }
+    return null;
+  }
+  function openFullApp(patientId) {
+    const u = new URL('/index.html', location.origin);
+    u.searchParams.set('view','pos');
+    if (patientId) u.searchParams.set('patient_id', patientId);
+    window.open(u.toString(), '_blank', 'noopener');
+  }
+
+  async function loadPatientDispenses(patientId) {
+    const tbody = document.getElementById('ow-patient-rows');
+    if (!patientId) {
+      tbody.innerHTML = `<tr><td colspan="5" class="py-3 text-rose-400">No patient id detected. Use the button above to open the app and dispense.</td></tr>`;
+      return;
+    }
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('created_at, product_name, qty_out, doctor_initials, remarks, type, patient_id')
+      .eq('type','sale').eq('patient_id', patientId)
+      .order('created_at', { ascending:false }).limit(100);
+    if (error) {
+      console.error(error);
+      tbody.innerHTML = `<tr><td colspan="5" class="py-3 text-rose-400">Error loading records.</td></tr>`;
+      return;
+    }
+    if (!data || data.length===0) {
+      tbody.innerHTML = `<tr><td colspan="5" class="py-3 text-slate-400">No dispenses for this patient yet.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = data.map(r => `
+      <tr class="border-t border-slate-700">
+        <td class="py-2 pr-4">${new Date(r.created_at).toLocaleString()}</td>
+        <td class="py-2 pr-4">${r.product_name || ''}</td>
+        <td class="py-2 pr-4">${r.qty_out || 0}</td>
+        <td class="py-2 pr-4">${r.doctor_initials || ''}</td>
+        <td class="py-2 pr-4">${r.remarks || ''}</td>
+      </tr>`).join('');
+  }
+
+  async function renderPatientPane() {
+    const app = document.getElementById('app');
+    const patientId = resolvePatientId();
+    app.innerHTML = `
+      <div class="card">
+        <div class="flex items-center justify-between mb-3">
+          <h1 class="text-xl font-semibold">Osler Wellness — POS & Stock</h1>
+          <div class="flex gap-2">
+            <span class="text-xs rounded-full bg-slate-800 border border-slate-700 px-2 py-1">Supabase: OK</span>
+            <span class="text-xs rounded-full bg-slate-800 border border-slate-700 px-2 py-1">Locations: SV & RH1</span>
+          </div>
+        </div>
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-lg font-semibold">Osler Wellness — Patient Dispenses</h3>
+          <button id="ow-open-dispense" class="px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white">Dispense (open app)</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-left text-slate-300">
+                <th class="py-2 pr-4">Date</th>
+                <th class="py-2 pr-4">Product</th>
+                <th class="py-2 pr-4">Qty</th>
+                <th class="py-2 pr-4">Doctor</th>
+                <th class="py-2 pr-4">Dosage/Remarks</th>
+              </tr>
+            </thead>
+            <tbody id="ow-patient-rows">
+              <tr><td colspan="5" class="py-3 text-slate-400">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+    document.getElementById('ow-open-dispense').addEventListener('click', () => openFullApp(patientId));
+    await loadPatientDispenses(patientId);
+  }
+  renderPatientPane();
+  </script>
+</body>
+</html>
