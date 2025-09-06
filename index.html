@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Osler Wellness — POS & Stock</title>
+  <style>
+    :root { --bg:#0b1520; --card:#0f1c29; --fg:#e9f1f7; --mut:#9fb3c8; --accent:#14b8a6; }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+    .wrap{max-width:1100px;margin:40px auto;padding:24px;}
+    .card{background:var(--card);border-radius:14px;padding:20px;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+    h1{font-size:22px;margin:0 0 12px 0;display:flex;align-items:center;gap:10px}
+    small{color:var(--mut)}
+    code{background:#07111b;border-radius:8px;padding:2px 8px}
+    button{background:var(--accent);border:none;color:#00333a;padding:10px 14px;border-radius:10px;font-weight:700;cursor:pointer}
+    .row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+    .pill{background:#07111b;color:var(--mut);padding:4px 8px;border-radius:999px;margin-left:8px;font-size:12px}
+    a{color:#7dd3fc}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Site is live <span class="pill">embeddable</span></h1>
+      <p>This minimal page confirms Netlify is serving your site and can be embedded in Plato.</p>
+      <ul>
+        <li>Test env function: <code>/.netlify/functions/env</code></li>
+        <li id="tok">Detected Plato token: <small>(none)</small></li>
+        <li id="pid">Detected patient id: <small>(none)</small></li>
+      </ul>
+      <div class="row">
+        <button id="testUpload">Test “Upload to Plato”</button>
+        <small id="upStatus" class="pill"></small>
+      </div>
+      <p style="margin-top:18px;color:var(--mut)">
+        Replace this <code>index.html</code> with your full UI when ready. Keep the folder structure and <code>netlify.toml</code>.
+      </p>
+    </div>
+  </div>
+  <script>
+    // Read query params Plato app passes (?token=&patient_id=)
+    const q = new URLSearchParams(location.search);
+    const token = q.get('token') || '(none)';
+    const patient = q.get('patient_id') || '(none)';
+    document.getElementById('tok').innerHTML = 'Detected Plato token: <code>' + token + '</code>';
+    document.getElementById('pid').innerHTML = 'Detected patient id: <code>' + patient + '</code>';
+    document.getElementById('testUpload').onclick = async () => {
+      const r = await fetch('/.netlify/functions/plato-draft', {
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body: JSON.stringify({ token, patient_id: patient, html: '<p>Test draft from Osler Wellness</p>' })
+      });
+      const j = await r.json().catch(()=>({ok:false}));
+      document.getElementById('upStatus').textContent = j.ok ? 'Upload ok' : 'Upload failed';
+    };
+  </script>
+</body>
+</html>

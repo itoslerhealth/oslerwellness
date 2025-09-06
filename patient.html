@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Osler Wellness — Patient</title>
+  <style>
+    body{background:#0b1520;color:#e9f1f7;font-family:Inter,system-ui}
+    .wrap{max-width:1100px;margin:40px auto;padding:0 24px}
+    .row{display:flex;gap:10px;align-items:center}
+    button{background:#14b8a6;border:none;color:#00333a;padding:10px 14px;border-radius:10px;font-weight:700;cursor:pointer}
+    table{width:100%;border-collapse:collapse;margin-top:16px;background:#0f1c29;border-radius:10px;overflow:hidden}
+    th,td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06)}
+    th{color:#9fb3c8;text-align:left;background:#0c1825}
+    .pill{background:#07111b;color:#9fb3c8;padding:4px 8px;border-radius:999px;margin-left:8px;font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row">
+      <h2 style="margin:0">Osler Wellness — Patient Records</h2>
+      <span id="pid" class="pill"></span>
+      <button id="dispense">Dispense…</button>
+    </div>
+    <table id="tbl">
+      <thead><tr><th>Date</th><th>Product</th><th>Qty</th><th>Dosage</th><th>Doctor</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+<script>
+  const q = new URLSearchParams(location.search);
+  const token = q.get('token') || '';
+  const patient_id = q.get('patient_id') || '';
+  document.getElementById('pid').textContent = patient_id ? ('Patient ' + patient_id) : 'No patient id';
+  document.getElementById('dispense').onclick = () => {
+    const target = new URL(location.origin + '/index.html');
+    if(token) target.searchParams.set('token', token);
+    if(patient_id) target.searchParams.set('patient_id', patient_id);
+    window.open(target.toString(), '_blank');
+  };
+  // Fake table content placeholder; wire to Supabase on your app
+  const tbody = document.querySelector('#tbl tbody');
+  tbody.innerHTML = '<tr><td colspan="5" style="color:#9fb3c8">No dispenses yet for this patient.</td></tr>';
+</script>
+</body></html>
