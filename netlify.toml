@@ -1,0 +1,16 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+# allow embedding inside Plato
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "ALLOWALL"
+    Content-Security-Policy = "frame-ancestors https://clinic.platomedical.com https://*.platomedical.com;"
+
+# simple redirect: root shows the patient tab by default
+[[redirects]]
+  from = "/"
+  to = "/patient.html"
+  status = 200
