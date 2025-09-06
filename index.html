@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Osler Inventory — POS & Stock</title>
+  <link rel="icon" href="icon.png" />
+  <style>
+    :root{ --bg:#0b1220; --card:#121a2b; --border:#223153; --text:#e6eef6; --muted:#9fb3c8; --ok:#34d399; --bad:#fb7185; --chip:#1f2a44; }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#0b1220,#0c152b);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial}
+    header{position:sticky;top:0;z-index:10;background:rgba(11,18,32,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
+    .wrap{max-width:1100px;margin:0 auto;padding:14px 18px}
+    h1{margin:0;font-size:20px}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:var(--chip);border:1px solid var(--border);color:var(--muted)}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .tabs button{padding:10px 14px;border-radius:999px;background:#0f1a30;border:1px solid var(--border);color:var(--text);cursor:pointer}
+    .tabs button.active{background:#1a2a4a;border-color:#34508a}
+    .card{background:linear-gradient(180deg,#101a2e,#0f192d);border:1px solid var(--border);border-radius:16px;padding:16px;margin-top:12px}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+    @media (max-width: 980px){ .grid{grid-template-columns:repeat(8,1fr);} }
+    @media (max-width: 680px){ .grid{grid-template-columns:repeat(4,1fr);} }
+    label{display:block;margin-bottom:4px;color:var(--muted)}
+    input,select{width:100%;background:#0f172a;border:1px solid var(--border);color:var(--text);border-radius:10px;padding:9px 10px;min-height:40px}
+    input:focus,select:focus{outline:none;border-color:#5eead4}
+    button{background:linear-gradient(180deg,#1b2a46,#16243e);border:1px solid var(--border);color:var(--text);border-radius:12px;padding:10px 12px;cursor:pointer}
+    button.primary{background:linear-gradient(180deg,#12b886,#0ea5a3);color:#052e2e;border-color:#0ea5a3;font-weight:700}
+    .help{color:var(--muted);font-size:12px}
+    table{width:100%;border-collapse:separate;border-spacing:0 6px}
+    thead th{padding:6px 10px;text-align:left;color:var(--muted);white-space:nowrap}
+    tbody td{padding:8px 10px;background:#121a2b;border:1px solid var(--border);border-left:none;border-right:none;vertical-align:middle}
+    tbody tr td:first-child{border-left:1px solid var(--border);border-radius:10px 0 0 10px}
+    tbody tr td:last-child{border-right:1px solid var(--border);border-radius:0 10px 10px 0}
+    tbody tr:hover td{background:#0f1c33}
+    .right{text-align:right}
+    .err{color:#fecdd3;background:#3f1016;border:1px solid #7a1f2a;padding:8px 10px;border-radius:10px}
+    .ok{color:#d1fae5;background:#0c2a24;border:1px solid #1b5a53;padding:8px 10px;border-radius:10px}
+    .info{color:#c7d2fe;background:#131a3a;border:1px solid #2b3670;padding:8px 10px;border-radius:10px}
+    .void td{ text-decoration: line-through; opacity:.6 }
+    .badge{display:inline-block;padding:2px 6px;border:1px solid var(--border);border-radius:999px;background:#1a273f;color:#9fb3c8;font-size:11px}
+    .row-actions{display:flex;gap:6px;flex-wrap:wrap}
+    .section-title{margin:10px 0 6px;color:#cbd5e1}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<header>
+  <div class="wrap" style="display:flex;gap:10px;align-items:center;justify-content:space-between">
+    <h1>📦 Osler Inventory — POS & Stock</h1>
+    <span class="pill">Supabase · Realtime · Locations: <b>SV</b> & <b>RH1</b></span>
+  </div>
+</header>
+
+<main class="wrap" id="app">
+  <nav class="tabs" id="tabs">
+    <button data-tab="pos" class="active" onclick="UI.switchTab('pos')">Dispense (POS)</button>
+    <button data-tab="inventory" onclick="UI.switchTab('inventory')">Inventory & Transfers</button>
+  </nav>
+
+  <!-- POS (Sale only; choose location) -->
+  <section id="tab-pos" class="card">
+    <h3 style="margin-top:0">Dispense</h3>
+    <div id="msg"></div>
+    <div class="grid" style="margin-bottom:8px">
+      <div style="grid-column: span 5">
+        <label>Product</label>
+        <select id="posProduct"></select>
+      </div>
+      <div style="grid-column: span 2">
+        <label>Location</label>
+        <select id="posLoc"><option>SV</option><option>RH1</option></select>
+      </div>
+      <div style="grid-column: span 2">
+        <label>Quantity</label>
+        <input id="posQty" type="number" min="1" step="1" value="1" />
+      </div>
+      <div style="grid-column: span 3">
+        <label>Unit Price</label>
+        <input id="posUnit" type="number" min="0" step="0.01" value="0" />
+      </div>
+      <div style="grid-column: span 3">
+        <label>Patient ID (Plato)</label>
+        <input id="posPatient" type="text" placeholder="auto if opened from patient page" />
+      </div>
+      <div style="grid-column: span 3">
+        <label>Dosage / Remarks</label>
+        <input id="posRemarks" type="text" placeholder="e.g., 1 tab bd" />
+      </div>
+      <div style="grid-column: span 2">
+        <label>Doctor Initials</label>
+        <input id="posDoctor" type="text" placeholder="AB" maxlength="6" />
+      </div>
+      <div style="grid-column: span 2; align-self:end">
+        <button class="primary" style="width:100%" onclick="Actions.submitSale()">✅ Submit</button>
+      </div>
+    </div>
+
+    <div style="margin-top:14px;overflow:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Date/Time</th>
+            <th>Type</th>
+            <th>Product</th>
+            <th>From</th>
+            <th>To</th>
+            <th class="right">Qty In</th>
+            <th class="right">Qty Out</th>
+            <th class="right">Unit Price</th>
+            <th>Patient</th>
+            <th>Doctor</th>
+            <th>Remarks</th>
+            <th class="right">SV On Hand</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="posTxBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- INVENTORY & TRANSFERS -->
+  <section id="tab-inventory" class="card" style="display:none">
+    <h3 style="margin-top:0">Products</h3>
+
+    <input type="hidden" id="pId" />
+    <div class="grid" style="margin-bottom:8px">
+      <div style="grid-column: span 5">
+        <label>Product Name</label>
+        <input id="pName" type="text" placeholder="e.g., Amoxicillin 500mg" />
+      </div>
+      <div style="grid-column: span 3">
+        <label>Barcode</label>
+        <input id="pBarcode" type="text" placeholder="EAN/UPC or custom" />
+      </div>
+      <div style="grid-column: span 2">
+        <label>Selling Price</label>
+        <input id="pPrice" type="number" min="0" step="0.01" value="0" />
+      </div>
+      <div style="grid-column: span 2; align-self:end; display:flex; gap:8px">
+        <button class="primary" id="pSaveBtn" onclick="Actions.saveProduct()">Save Product</button>
+        <button id="pCancelBtn" style="display:none" onclick="Actions.cancelEdit()">Cancel</button>
+      </div>
+    </div>
+
+    <div class="section-title">Quick Stock: Receive / Dispense (by location)</div>
+    <div class="grid" style="margin-bottom:8px">
+      <div style="grid-column: span 5">
+        <label>Product</label>
+        <select id="stkProduct"></select>
+      </div>
+      <div style="grid-column: span 2">
+        <label>Location</label>
+        <select id="stkLoc"><option>SV</option><option>RH1</option></select>
+      </div>
+      <div style="grid-column: span 2">
+        <label>Receive Qty</label>
+        <input id="stkIn" type="number" min="0" step="1" value="0" />
+      </div>
+      <div style="grid-column: span 2">
+        <label>Dispense Qty</label>
+        <input id="stkOut" type="number" min="0" step="1" value="0" />
+      </div>
+      <div style="grid-column: span 1; align-self:end">
+        <button onclick="Actions.receive()">Add</button>
+      </div>
+      <div style="grid-column: span 1; align-self:end">
+        <button onclick="Actions.dispenseAt()">Dispense</button>
+      </div>
+    </div>
+
+    <div class="section-title">Transfer between locations</div>
+    <div class="grid" style="margin-bottom:8px">
+      <div style="grid-column: span 5">
+        <label>Product</label>
+        <select id="trProduct"></select>
+      </div>
+      <div style="grid-column: span 2">
+        <label>From</label>
+        <select id="trFrom"><option>SV</option><option>RH1</option></select>
+      </div>
+      <div style="grid-column: span 2">
+        <label>To</label>
+        <select id="trTo"><option>SV</option><option>RH1</option></select>
+      </div>
+      <div style="grid-column: span 2">
+        <label>Quantity</label>
+        <input id="trQty" type="number" min="1" step="1" value="1" />
+      </div>
+      <div style="grid-column: span 1; align-self:end">
+        <button class="primary" onclick="Actions.transfer()">Transfer</button>
+      </div>
+    </div>
+
+    <div style="margin-top:14px;overflow:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Barcode</th>
+            <th class="right">Price</th>
+            <th class="right">On Hand (SV)</th>
+            <th class="right">On Hand (RH1)</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="invBody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+// ---- CONFIG ----
+const SUPABASE_URL = "YOUR_SUPABASE_URL";
+const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const qs = new URLSearchParams(location.search);
+const money = n => Number(n||0).toFixed(2);
+
+// ---- DATA HELPERS ----
+async function listProducts(){ const { data, error } = await sb.from('products').select('id,name,barcode,sell_price').order('name'); if(error) throw error; return data||[]; }
+async function listProductsWithBalances(){
+  const { data, error } = await sb.from('products_with_balances').select('id,name,barcode,sell_price,on_hand_sv,on_hand_rh1').order('name');
+  if(error) throw error; return data||[];
+}
+async function rpc(name, args){ const { data, error } = await sb.rpc(name, args); if(error) throw error; return data; }
+
+// ---- UI ----
+const UI = {
+  async switchTab(name){
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+    document.querySelector('#tab-pos').style.display = name==='pos' ? 'block':'none';
+    document.querySelector('#tab-inventory').style.display = name==='inventory' ? 'block':'none';
+    if(name==='pos'){ await this.renderPOS(); } else { await this.renderInventory(); }
+  },
+
+  async renderPOS(){
+    await this.populateSelect('#posProduct');
+    await this.renderTxTable();
+    // price auto-fill
+    const sel = document.querySelector('#posProduct');
+    const up = document.querySelector('#posUnit');
+    sel.onchange = ()=>{ up.value = sel.selectedOptions[0]?.dataset?.price || 0; };
+    sel.dispatchEvent(new Event('change'));
+  },
+
+  async renderInventory(){
+    await this.populateSelect('#stkProduct');
+    await this.populateSelect('#trProduct');
+    const body = document.querySelector('#invBody'); body.innerHTML = '';
+    const products = await listProductsWithBalances();
+    for(const p of products){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${p.name}</strong></td>
+        <td>${p.barcode||''}</td>
+        <td class="right">${money(p.sell_price||0)}</td>
+        <td class="right">${p.on_hand_sv||0}</td>
+        <td class="right">${p.on_hand_rh1||0}</td>
+        <td>
+          <div class="row-actions">
+            <button onclick="Actions.editProduct('${p.id}','${encodeURIComponent(p.name)}','${encodeURIComponent(p.barcode||"")}','${p.sell_price||0}')">Edit</button>
+          </div>
+        </td>`;
+      body.appendChild(tr);
+    }
+  },
+
+  async renderTxTable(){
+    const body = document.querySelector('#posTxBody'); body.innerHTML = '';
+    // Patient-specific if context has patientId
+    const patientId = document.querySelector('#posPatient').value.trim() || null;
+    let rows = [];
+    if(patientId){
+      rows = await rpc('get_patient_dispenses', { p_patient: patientId });
+    }else{
+      rows = await rpc('get_movement_report', { p_limit: 200 });
+    }
+
+    for(const r of rows){
+      const tr = document.createElement('tr'); if(r.voided) tr.classList.add('void');
+      const actions = r.voided ? '<span class="badge">VOID</span>' : (r.type==='VOID' ? '<span class="badge">VOID</span>' : `<button onclick="Actions.void('${r.id}')">Void</button>`);
+      tr.innerHTML = `
+        <td>${new Date(r.created_at).toLocaleString()}</td>
+        <td>${r.type}</td>
+        <td>${r.product_name||''}</td>
+        <td>${r.from_loc||''}</td>
+        <td>${r.to_loc||''}</td>
+        <td class="right">${r.qty_in||0}</td>
+        <td class="right">${r.qty_out||0}</td>
+        <td class="right">${money(r.unit_price||0)}</td>
+        <td>${r.patient_id||''}</td>
+        <td>${r.doctor_initials||''}</td>
+        <td>${r.remarks||''}</td>
+        <td class="right">${r.sv_on_hand_after ?? ''}</td>
+        <td>${actions}</td>`;
+      body.appendChild(tr);
+    }
+  },
+
+  async populateSelect(selector){
+    const sel = document.querySelector(selector);
+    sel.innerHTML = '<option value="">&mdash; select &mdash;</option>';
+    const products = await listProducts();
+    for(const p of products){
+      const o = document.createElement('option');
+      o.value = p.id; o.textContent = p.name; o.dataset.price = p.sell_price||0;
+      sel.appendChild(o);
+    }
+  },
+
+  info(m){ this._msg(`<div class='info'>${m}</div>`); },
+  ok(m){ this._msg(`<div class='ok'>${m}</div>`); },
+  error(m){ this._msg(`<div class='err'>${m}</div>`); },
+  _msg(html){ const box=document.querySelector('#msg'); box.innerHTML=html; setTimeout(()=>{ if(box.innerHTML===html) box.innerHTML=''; }, 4000); }
+};
+
+const Actions = {
+  // Products
+  async saveProduct(){
+    try{
+      const id = document.querySelector('#pId').value || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()));
+      const name = document.querySelector('#pName').value.trim();
+      const barcode = document.querySelector('#pBarcode').value.trim() || null;
+      const price = Number(document.querySelector('#pPrice').value||0);
+      if(!name && !barcode) return UI.error('Enter a name or barcode');
+      const p = { id, name: name || (barcode ?? 'Unnamed'), barcode, sell_price: price };
+      const { data, error } = await sb.from('products').upsert(p).select().single();
+      if(error) throw error;
+      UI.ok(document.querySelector('#pId').value ? 'Product updated.' : 'Product created.');
+      document.querySelector('#pId').value=''; document.querySelector('#pName').value='';
+      document.querySelector('#pBarcode').value=''; document.querySelector('#pPrice').value='0';
+      document.querySelector('#pSaveBtn').textContent = 'Save Product';
+      document.querySelector('#pCancelBtn').style.display = 'none';
+      await UI.renderInventory(); await UI.populateSelect('#posProduct');
+    }catch(e){ UI.error(e.message||'Save failed'); }
+  },
+  editProduct(id, nameEnc, barcodeEnc, price){
+    document.querySelector('#pId').value = id;
+    document.querySelector('#pName').value = decodeURIComponent(nameEnc);
+    document.querySelector('#pBarcode').value = decodeURIComponent(barcodeEnc || '');
+    document.querySelector('#pPrice').value = price || 0;
+    document.querySelector('#pSaveBtn').textContent = 'Update Product';
+    document.querySelector('#pCancelBtn').style.display = 'inline-block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  },
+  cancelEdit(){
+    document.querySelector('#pId').value='';
+    document.querySelector('#pName').value='';
+    document.querySelector('#pBarcode').value='';
+    document.querySelector('#pPrice').value='0';
+    document.querySelector('#pSaveBtn').textContent = 'Save Product';
+    document.querySelector('#pCancelBtn').style.display = 'none';
+  },
+
+  // POS sale at selected location
+  async submitSale(){
+    try{
+      const sel = document.querySelector('#posProduct');
+      const product_id = sel.value; if(!product_id) return UI.error('Choose a product');
+      const loc = document.querySelector('#posLoc').value;
+      const qty = Math.max(1, Number(document.querySelector('#posQty').value||1));
+      const unit_price = Number(document.querySelector('#posUnit').value||0);
+      const patient_id = document.querySelector('#posPatient').value.trim() || null;
+      const remarks = document.querySelector('#posRemarks').value.trim() || null;
+      const doctor_initials = document.querySelector('#posDoctor').value.trim() || null;
+      await rpc('post_sale_at', { p_product: product_id, p_loc: loc, p_qty: qty, p_price: unit_price, p_patient: patient_id, p_doctor: doctor_initials, p_remarks: remarks });
+      UI.ok('Dispensed.');
+      await UI.renderTxTable(); await UI.renderInventory();
+    }catch(e){ UI.error(e.message||'Submit failed'); }
+  },
+
+  // Inventory Quick Stock
+  async receive(){
+    try{
+      const sel = document.querySelector('#stkProduct'); const product_id = sel.value;
+      if(!product_id) return UI.error('Select product for Add');
+      const loc = document.querySelector('#stkLoc').value;
+      const qty = Math.max(0, Number(document.querySelector('#stkIn').value||0));
+      if(qty<=0) return UI.error('Enter a positive Receive Qty');
+      await rpc('receive_stock', { p_product: product_id, p_loc: loc, p_qty: qty });
+      UI.ok('Stock added.');
+      document.querySelector('#stkIn').value = 0;
+      await UI.renderTxTable(); await UI.renderInventory();
+    }catch(e){ UI.error(e.message||'Add failed'); }
+  },
+  async dispenseAt(){
+    try{
+      const sel = document.querySelector('#stkProduct'); const product_id = sel.value;
+      if(!product_id) return UI.error('Select product for Dispense');
+      const loc = document.querySelector('#stkLoc').value;
+      const qty = Math.max(0, Number(document.querySelector('#stkOut').value||0));
+      if(qty<=0) return UI.error('Enter a positive Dispense Qty');
+      await rpc('post_sale_at', { p_product: product_id, p_loc: loc, p_qty: qty, p_price: 0, p_patient: null, p_doctor: null, p_remarks: 'Quick dispense' });
+      UI.ok('Dispensed.');
+      document.querySelector('#stkOut').value = 0;
+      await UI.renderTxTable(); await UI.renderInventory();
+    }catch(e){ UI.error(e.message||'Dispense failed'); }
+  },
+
+  // Transfer
+  async transfer(){
+    try{
+      const sel = document.querySelector('#trProduct'); const product_id = sel.value;
+      if(!product_id) return UI.error('Select product for Transfer');
+      const from = document.querySelector('#trFrom').value;
+      const to = document.querySelector('#trTo').value;
+      const qty = Math.max(1, Number(document.querySelector('#trQty').value||1));
+      if(from===to) return UI.error('From and To cannot be the same');
+      await rpc('transfer_stock', { p_product: product_id, p_from: from, p_to: to, p_qty: qty });
+      UI.ok('Transferred.');
+      await UI.renderTxTable(); await UI.renderInventory();
+    }catch(e){ UI.error(e.message||'Transfer failed'); }
+  },
+
+  async void(id){
+    if(!confirm('Void this transaction?')) return;
+    try{ await rpc('void_transaction', { p_tx_id: id }); UI.ok('Voided.'); await UI.renderTxTable(); await UI.renderInventory(); }
+    catch(e){ UI.error(e.message||'Void failed'); }
+  }
+};
+
+// ---- Patient-tab mode: verify token and lock UI ----
+async function tryPrefillPatient(){
+  const token = qs.get('token');
+  if(!token) return;
+  try{
+    const res = await fetch('/.netlify/functions/plato-context?token=' + encodeURIComponent(token));
+    if(!res.ok) return;
+    const ctx = await res.json();
+    if(ctx && ctx.patientId){
+      // Lock to patient mode
+      document.querySelector('#posPatient').value = ctx.patientId;
+      document.querySelector('#posPatient').disabled = true;
+      // Hide Inventory tab in patient context
+      document.querySelector('#tabs [data-tab="inventory"]').style.display = 'none';
+      await UI.renderTxTable();
+    }
+  }catch(e){ console.warn('Context error', e); }
+}
+
+(async () => {
+  UI.switchTab('pos');
+  await UI.populateSelect('#posProduct');
+  await tryPrefillPatient();
+  await UI.renderPOS();
+})();
+</script>
+</body>
+</html>
